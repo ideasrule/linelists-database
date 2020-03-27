@@ -7,7 +7,7 @@ Created on Fri Jun 21 16:02:30 2019
 """
 
 #this code helps import exomol data into the dataabase
-
+from connection_info import db_url, db_user, db_passwd, db_name
 import MySQLdb
 import numpy as np
 from query_functions import sql_bulk_order, sql_order, fetch
@@ -233,7 +233,7 @@ def import_exomol_data(mol_name, iso_name, version_name, trans_fp, states_fp, pa
     
     one_iso_time = time.time()  
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist') 
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name) 
     #create a cursor object
     cursor = db.cursor()
     #disable autocommit to improve performance

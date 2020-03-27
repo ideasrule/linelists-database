@@ -7,7 +7,7 @@ Created on Thu Jun 20 13:13:51 2019
 """
 
 #this code helps insert hitran data into the database
-
+from connection_info import db_url, db_user, db_passwd, db_name
 import MySQLdb
 from query_functions import sql_order, fetch
 
@@ -15,7 +15,7 @@ from query_functions import sql_order, fetch
 
 def insert_hitran(filename, version_name, particle_id, reference_link): 
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist')
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name)
     
     #create a cursor object
     cursor = db.cursor()

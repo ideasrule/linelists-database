@@ -7,6 +7,7 @@ Created on Fri Aug 16 13:16:47 2019
 """
 
 import compute_absorption
+import numpy as np
 
 #Interactive User Interface for Absorption Cross Section Calculator
 #Working but need to refine more to be more complete and userr friendly
@@ -37,6 +38,7 @@ while True:
         v = []
         for i in temp:
             v.append(float(i))
+        v = np.array(v)
         T = float(input('At what temperature (K) Sir? \n'))
         p = float(input('At what pressure (atm) Sir? \n'))
         

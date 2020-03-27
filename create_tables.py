@@ -7,6 +7,7 @@ Created on Wed Jun 26 10:49:14 2019
 """
 #this file creates linelist database and tables in mysql
 
+from connection_info import db_url, db_user, db_passwd, db_name
 import MySQLdb
 from query_functions import sql_order
 import time
@@ -14,10 +15,10 @@ import time
 ###############
 
 def create_database():
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@')
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd)
     cursor = db.cursor()
-    cursor.execute('DROP DATABASE IF EXISTS linelist')
-    cursor.execute('CREATE DATABASE linelist')
+    cursor.execute('DROP DATABASE IF EXISTS {}'.format(db_name))
+    cursor.execute('CREATE DATABASE {}'.format(db_name))
     db.commit()
     cursor.close()
     db.close()

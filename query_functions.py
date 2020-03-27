@@ -5,7 +5,7 @@ Created on Tue Jun 25 11:56:36 2019
 
 @author: toma
 """
-
+from connection_info import db_url, db_user, db_passwd, db_name
 import MySQLdb
 import time
 
@@ -15,7 +15,7 @@ import time
 
 def sql_order(query):
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist') 
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name)
     
     #create a cursor object
     cursor = db.cursor()
@@ -39,8 +39,7 @@ def sql_order(query):
 
 def sql_bulk_order(query, data):
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist') 
-    
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name)
     #create a cursor object
     cursor = db.cursor()
     
@@ -65,7 +64,7 @@ def sql_bulk_order(query, data):
         
 def fetch(query): 
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist') 
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name)
     #do put actual password when run
     
     #create a cursor object

@@ -17,6 +17,7 @@ Created on Thu Jun 20 13:12:27 2019
 #this code fetch data from database and compute absorption cross section data 
 #as the user desired with a user interface main()
 
+from connection_info import db_url, db_user, db_passwd, db_name
 import MySQLdb
 import math
 from query_functions import fetch
@@ -208,7 +209,7 @@ def compute_all(v, T, p, iso_name, line_source='default'):
     print(Q)
 
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist') 
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name) 
     #do put actual password when run
     
     #create a cursor object
@@ -350,7 +351,7 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
     fetch_time =  time.time()
     
     #connect to the database
-    db = MySQLdb.connect(host='localhost', user='toma', passwd='Happy810@', db='linelist') 
+    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name)
     #do put actual password when run
     
     #create a cursor object
@@ -554,7 +555,7 @@ def main():
     print(test)
     print(wavenums)
     print(absorption_cross_section.shape, test.shape)
-    np.save('/home/toma/Desktop/absorption.npy', absorption_cross_section)
+    np.save('absorption.npy', absorption_cross_section)
     
     print("Finished in %s seconds" % (time.time() - start_time))
 if __name__ == '__main__':
