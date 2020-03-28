@@ -25,6 +25,7 @@ import numpy as np
 import time
 from astropy.modeling.models import Voigt1D
 import scipy
+import matplotlib.pyplot as plt
 
 #numexpr
 import numexpr as ne
@@ -45,7 +46,7 @@ h = 6.62606885e-27
 #boltzmann constant
 k_B = 1.38064852e-16
 #reference Temperature in K
-T_ref = 296 
+T_ref = 296
 #store the value of c_2 = h * c / k_B
 c_2 = h * c / k_B
 #store the conversion from gram to amu
@@ -85,167 +86,6 @@ def get_particle(iso_name):
     #data[0] = (particle_id, iso_abundance, iso_mass)
     return data[0]
     
-##########################
-
-#absorption(v, T, p) = S_ij(T) * f(v, v_ij, T, p)        
-def compute_one_absorption(line, v, T, p, Q, iso_abundance, iso_mass):
-    #line is a tuple returned by fetchone() operation
-    #parameters for fectone() data corresponding to tuple indexes: 
-    #(nu, a, gamma_air, n_air, delta_air, elower, g_upper, gamma_H2, n_H2, delta_H2, gamma_He, n_He, delta_He)
-    #(0,  1,     2,       3,       4,        5,     6,    7,       8,      9,      10,      11,     12   )
-    
-    #just name the variables to make things clear and easy to check
-    v_ij = line[0] #v_ij = nu !!!!!!!
-    a = line[1]
-    gamma_air = line[2]
-    n_air = line[3]
-    delta_air = line[4]
-    elower = line[5]
-    g_upper = line[6]
-    gamma_H2 = line[7]
-    n_H2 = line[8]
-    delta_H2 = line[9]
-    gamma_He = line[10]
-    n_He = line[11]
-    delta_He = line[12]
-    
-    #compute line intensity function S_ij(T)
-    S_ij = (iso_abundance * a * g_upper * math.exp(-c_2 * elower / T) * (1 - math.exp(-c_2 * v_ij / T))) / (8 * math.pi * c * math.pow(v_ij, 2) * Q)
-    
-    #compute gamma(p,T) for f
-    #T_red = 296 K
-    #gamma_p_T = p * ((T_ref / T)^n_H2 * gamma_H2 * f_H2 + (T_ref / T)^n_He * gamma_He * f_He)
-    #where f_H2 = 0.85 and f_He = 0.15
-    #if either n_H2 or n_He does not exist, f_H2/He (the exisiting one) = 1.0
-    if n_H2 is not None and gamma_H2 is not None and n_He is not None and gamma_He is not None:
-        gamma_p_T = p * (math.pow(T_ref/ T, n_H2) * gamma_H2 * 0.85 + math.pow(T_ref / T, n_He) * gamma_He * 0.15)
-        
-    #if n_H2 does not exist, f_He = 1
-    elif (n_H2 is None  or gamma_H2 is None) and (n_He is not None and gamma_He is not None):
-        gamma_p_T = p * math.pow(T_ref / T, n_He) * gamma_He
-    
-    #if n_He does not exist, f_H2 = 1
-    elif (n_He is None or gamma_He is None) and (n_H2 is not None and gamma_H2 is not None):
-        gamma_p_T = p * math.pow(T_ref / T, n_H2) * gamma_H2
-    
-    #if both n_H2 or n_He does not exist
-    #gamma_p_T = p * (T_ref / T)^n_air * gamma_air
-    else:
-        gamma_p_T = p * math.pow(T_ref / T, n_air) * gamma_air
-    
-
-    #compute v_ij_star for f 
-    #v_ij_star = v_ij + delta_net * p, where delta_net is computed in similar fashion to gamma_p_T
-    if delta_H2 is not None and delta_He is not None: #if both delta exists
-        v_ij_star = v_ij + p * (delta_H2 * 0.85 + delta_He * 0.15)
-        
-    elif delta_H2 is None and delta_He is not None: #when delta_H2 does not exist, f_He = 1.0
-        v_ij_star = v_ij + p * delta_He
-    
-    elif delta_He is None and delta_H2 is not None: #when delta_He does not exist, f_H2 = 1.0
-        v_ij_star = v_ij + p * delta_H2
-    
-    ######################!!!!!!!!!!!!!!this statement might be problematic..check logic!
-    elif delta_air is not None: #when both delta_H2 and delta_He does not exist, use delta_air
-        v_ij_star = v_ij + p * delta_air
-    else: #when all deltas do not exist
-        v_ij_star = v_ij
-    
-    #alternative way to compute voigt function: 70.0055468082428 seconds ; 0.01% diff ; 18% speed up
-    sigma_thermal = np.sqrt(k_B * T / iso_mass / G_TO_AMU / c**2) * v_ij_star
-    z = (v - v_ij_star + gamma_p_T * 1j) / sigma_thermal / np.sqrt(2)
-    voigt_profile = np.real(scipy.special.wofz(z))/sigma_thermal / np.sqrt(2*math.pi)
-    absorption = S_ij * voigt_profile
-    
-    '''
-    #astropy way computing voigt function : 86.21910214424133 seconds ; 0.01% diff
-    doppler_broad = math.sqrt((8 * k_B * T * math.log(2)) / (iso_mass * G_TO_AMU * c**2)) * v_ij
-    absorption_function = Voigt1D(x_0=v_ij_star, amplitude_L= 1 / (gamma_p_T * math.pi), fwhm_L=2 * gamma_p_T, fwhm_G=doppler_broad)
-    absorption = S_ij * absorption_function(v)
-    '''
-    
-    return absorption
-
-###################
-    
-#given input v, T, p, iso_name, source, and version, fetch all the line data of the input iso_name
-#use the parameters feteched to compute absorption cross section with the help of other functions
-def compute_all(v, T, p, iso_name, line_source='default'): 
-    
-    #get particle_id and iso_abundance using the correct function
-    particle_data = get_particle(iso_name)
-    particle_id = particle_data[0]
-    iso_abundance = particle_data[1]
-    iso_mass = particle_data[2]
-    
-    #get line source id
-    if line_source == 'default': 
-        line_source_id = fetch("SELECT default_line_source_id FROM particles WHERE particle_id = {}".format(particle_id))[0][0]
-    else: 
-        get_line_source_id_query = "SELECT line_source_id FROM source_properties WHERE line_source = '{}' and \
-        particle_id = {}".format(line_source, particle_id)
-        data = fetch(get_line_source_id_query)
-        if len(data) != 1:
-            raise Exception('should have exactly one line_source_id corresponding to one line_source and isotopologue')   
-        line_source_id = data[0][0]
-    print(line_source_id)
-        
-    #if computing using hitemp data, use hitran partitions, so get hitran line_source_id for partitions
-    if 'HITEMP' in line_source: 
-        get_hitran_source_id_query = "SELECT line_source, line_source_id FROM source_properties WHERE particle_id = {}".format(particle_id)
-        sources = fetch(get_hitran_source_id_query)
-        hitran_id = -1
-        for source in sources: 
-            if source[0].startswith('HITRAN'): 
-                hitran_id = source[1]
-        if hitran_id == -1:
-            raise Exception('This isotopologue has hitemp but no hitran linelist which is weird')
-        #use hitran id to get partitions for hitemp
-        Q = get_partition(T, hitran_id, particle_id)
-    
-    else: #for other sources, use line source id to get partitions   
-        #get paritition using the correct function
-        Q = get_partition(T, line_source_id, particle_id)
-    print(Q)
-
-    #connect to the database
-    db = MySQLdb.connect(host=db_url, user=db_user, passwd=db_passwd, db=db_name) 
-    #do put actual password when run
-    
-    #create a cursor object
-    cursor = db.cursor()
-    
-    #query for all the lines of the specified isotopologue from the user given nu, line_source
-    query = "SELECT nu, A, gamma_air, n_air, delta_air, elower, g_upper, gamma_H2, \
-    n_H2, delta_H2, gamma_He, n_He, delta_He FROM transitions WHERE particle_id = {} AND \
-    line_source_id = '{}'".format(particle_id, line_source_id)
-    
-    print(query)
-    
-    #this gives us a table of all the parameters we desire in a table in mysql
-    cursor.execute(query)
-    #rowcount is a read-only attribute and returns the number of rows that were affected by the execute() method.
-    rows = cursor.rowcount
-    print(rows, 'lines')
-    #the table could be gigantic, therefore fetchall() could be slow, therefore
-    #would rather fetch one single line as a tuple ( , , , ) each time and
-    #compute the absorption for that line, store it in variable and sum it over iterations. 
-    absorption_cross_section = np.zeros(len(v))
-
-    for i in range(rows):
-        #fetch one line
-        line = cursor.fetchone()
-        cond =  np.logical_and(v >= line[0] - 25, v <= line[0] + 25)
-        if np.sum(cond) > 0:
-            absorption_cross_section[cond] += compute_one_absorption(line, v[cond], T, p, Q, iso_abundance, iso_mass)
-        #print(i)
-    
-    #close up cursor and connection
-    cursor.close()
-    db.close()
-    
-    return absorption_cross_section
-        
 #########################
 #@@profile
 #@jit(parallel=False, fastmath=True)
@@ -324,7 +164,7 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
         if len(data) != 1:
             raise Exception('should have exactly one line_source_id corresponding to one line_source and isotopologue')   
         line_source_id = data[0][0]
-    print(line_source_id)
+    print("Using line source ID", line_source_id)
         
     #if computing using hitemp data, use hitran partitions, so get hitran line_source_id for partitions
     if 'HITEMP' in line_source: 
@@ -342,7 +182,7 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
     else: #for other sources, use line source id to get partitions   
         #get paritition using the correct function
         Q = get_partition(T, line_source_id, particle_id)
-    print(Q)
+    print("Q:", Q)
     '''
     #Q = 162879.38910000 #NO2
     Q = 152.18884000 #H2O at 270K
@@ -359,8 +199,8 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
 
     #query for all the lines of the specified isotopologue from the user given nu, line_sources
     query = "SELECT nu, A, gamma_air, n_air, delta_air, elower, g_upper, gamma_H2, \
-    n_H2, delta_H2, gamma_He, n_He, delta_He FROM transitions WHERE particle_id = {} AND \
-    line_source_id = '{}' ORDER BY nu".format(particle_id, line_source_id)
+    n_H2, delta_H2, gamma_He, n_He, delta_He FROM transitions WHERE \
+    line_source_id = '{}' ORDER BY nu".format(line_source_id)
     
     #this gives us a table of all the parameters we desire in a table in mysql
     cursor.execute(query)
@@ -393,14 +233,14 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
     absorption_cross_section = np.zeros(len(v))
     while True: 
         counter += 1
-        print(counter)
+        print("Counter", counter)
         
         #end = min(start + num_rows, len(all_lines_array))
         #lines_array = all_lines_array[start:end]
         #print(len(lines_array))
 
         lines_table = cursor.fetchmany(size=num_rows) #########################
-        lines_array = np.asarray(lines_table, dtype=np.float32) ################
+        lines_array = np.asarray(lines_table, dtype=np.float64) ################
         print(lines_array.shape)
         
         ###############construct gamma and n arrays
@@ -444,7 +284,7 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
         #if either n_H2 or n_He does not exist, f_H2/He (the exisiting one) = 1.0
         has_H2_and_He_gamma_N = np.all([bool_gamma_H2, bool_n_H2, bool_gamma_He, bool_n_He], axis=0)
         gamma_p_T[has_H2_and_He_gamma_N] = p * (T_ref/ T)**(n_H2[has_H2_and_He_gamma_N]) * gamma_H2[has_H2_and_He_gamma_N] \
-                 * 0.85 + (T_ref / T)**(n_He[has_H2_and_He_gamma_N]) * gamma_He[has_H2_and_He_gamma_N] * 0.15
+                 * 0.85 + p * (T_ref / T)**(n_He[has_H2_and_He_gamma_N]) * gamma_He[has_H2_and_He_gamma_N] * 0.15
         
         #if n_H2 does not exist, f_He = 1
         has_He_but_not_H2_gamma_N = np.all([bool_gamma_He, bool_n_He, ~np.logical_or(bool_gamma_H2, bool_n_H2)], axis=0)
@@ -457,6 +297,7 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
         #if both n_H2 or n_He does not exist
         #gamma_p_T = p * (T_ref / T)^n_air * gamma_air
         has_only_air_gamma_N = gamma_p_T == 0
+        print("gamma and N:", np.sum(has_H2_and_He_gamma_N), np.sum(has_He_but_not_H2_gamma_N), np.sum(has_only_air_gamma_N))
         gamma_p_T[has_only_air_gamma_N] = p * (T_ref / T)**(n_air[has_only_air_gamma_N]) * gamma_air[has_only_air_gamma_N]
         
         ###################
@@ -490,7 +331,8 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
         #when all deltas do not exist
         has_no_delta = np.all([~bool_delta_air, ~bool_delta_H2, ~bool_delta_He], axis=0)
         v_ij_star[has_no_delta] = v_ij[has_no_delta]
-        
+
+        print("deltas:", np.sum(has_H2_and_He_delta), np.sum(has_He_but_not_H2_delta), np.sum(has_H2_but_not_He_delta), np.sum(has_air_but_not_H2_and_He_delta), np.sum(has_no_delta))
         #need to pass in: v_ij_star, a, elower, g_upper, gamma_p_T : all arrays
         
         ##################
@@ -500,26 +342,18 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
         print(lower_indexes, upper_indexes)
         
         for i in range(len(v)): 
-            if i % 100000 == 0: 
-                print(i)
-                
+            if i % 1000 == 0:
+                print("Progress", i/len(v))
             #no_need_compute = lower_indexes == upper_indexes
             #print(no_need_compute)
             #lower_indexes = lower_indexes[no_need_compute]
             #print(lower_indexes)
-            
             absorption_cross_section[i] = compute_one_wavenum(v[i], T, p, iso_abundance, iso_mass, Q, \
                                     v_ij_star[lower_indexes[i] : upper_indexes[i]], a[lower_indexes[i] : upper_indexes[i]], \
                                     elower[lower_indexes[i] : upper_indexes[i]], g_upper[lower_indexes[i] : upper_indexes[i]], \
                                     gamma_p_T[lower_indexes[i] : upper_indexes[i]])
         if len(lines_array) < num_rows:
             break
-        '''
-        absorption_cross_section += compute_one_wavenum(v, T, p, iso_abundance, iso_mass, Q, v_ij_star, a, elower, g_upper, gamma_p_T, lower_indexes, upper_indexes)
-        start += num_rows
-        if end == len(all_lines_array):
-            break
-        '''
     #close up cursor and connection
     #cursor.close()
     #db.close()
@@ -533,13 +367,14 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
 def main():
         
     start_time = time.time()
-    
+    wavelengths = np.exp(np.linspace(np.log(0.3e-6), np.log(30e-6), 4616))
+    wavenums = 1e-2 / wavelengths#[::-1]
     #wavelengths in m --> convert to cm (x100)
     #wavelengths = np.loadtxt('/home/toma/Desktop/output_1000_1d-1.xsec', usecols=1, unpack=True) * 100
     #thus, wavenums in cm^-1
     #wavenums = 1.0/wavelengths
     #wavelengths = np.exp(np.linspace(np.log(0.3e-4), np.log(30e-4), 4616))
-    wavenums, test = np.loadtxt('/home/toma/Desktop/output_1000_1d-1.xsec', usecols=(0,1), unpack=True)
+    #wavenums, test = np.loadtxt('test_output_1000_1d-1.xsec', usecols=(0,1), unpack=True)
     
     #wavenums = np.loadtxt('/home/toma/Desktop/N2O_1000_1d-1.xsec', usecols=0, unpack=True)
     #wavelengths, continuum = np.loadtxt('/home/toma/Desktop/Telluric Spectrum', usecols=(2, 5) , skiprows=1, unpack=True)
@@ -548,14 +383,17 @@ def main():
     #earth_spec = new_compute_all(wavenums, 270, 0.5, '(1H)2(16O)', 'HITRAN_2016')
     #earth_spec *= continuum
     #np.save('/home/toma/Desktop/telluric_spectrum_model.npy', earth_spec)
-    #absorption_cross_section = new_compute_all(wavenums, 1000, 0.1, '(14N)(16O)2', 'HITEMP_2019')
+    #absorption_cross_section = new_compute_all(wavenums, 1000, 0.1, '(14N)(16O)', 'default')
     #absorption_cross_section = compute_all(wavenums, 1000, 0.1, '(14N)(16O)2', 'HITEMP_2019')
-    absorption_cross_section = new_compute_all(wavenums, 1000, 0.1, '(12C)(16O)', 'HITRAN_2016')
-    print('absorption_cross_section is', absorption_cross_section)
-    print(test)
-    print(wavenums)
-    print(absorption_cross_section.shape, test.shape)
-    np.save('absorption.npy', absorption_cross_section)
+    absorption_cross_section = new_compute_all(wavenums, 1000, 0.1, '(12C)(16O)', 'default')
+    np.save('absorption_serial_CO.npy', absorption_cross_section)
+    #plt.semilogy(wavenums, test)
+    plt.semilogy(wavenums, absorption_cross_section)
+    #plt.figure()
+    #plt.semilogy(wavenums, test/absorption_cross_section)
+    plt.show()
+    print('absorption_cross_section is', absorption_cross_section[4000])
+
     
     print("Finished in %s seconds" % (time.time() - start_time))
 if __name__ == '__main__':
