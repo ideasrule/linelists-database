@@ -22,6 +22,7 @@ c_2 = h * c / k_B
 G_TO_AMU = 1.66054e-24#1.66053904e-24
 #store pi value
 pi = 3.1415926535897932384626433
+BAR_TO_PASCAL = 1e5
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -230,15 +231,19 @@ def handle_slave():
     print("deltas:", np.sum(has_H2_and_He_delta), np.sum(has_He_but_not_H2_delta), np.sum(has_H2_but_not_He_delta), np.sum(has_air_but_not_H2_and_He_delta), np.sum(has_no_delta))
     
     ##################
-    #indexes = np.searchsorted(ines_array, v) #where v[indexes - 1] < lines_array <= v[indexes]
-    lower_indexes = np.searchsorted(lines_array[:,0], wavenums - 25, side='right') #where lines_array[indexes - 1] <= v - 25 < lines_array[indexes]
-    upper_indexes = np.searchsorted(lines_array[:,0], wavenums + 25) #where lines_array[indexes - 1] < v + 25 <= lines_array[indexes]
-
     counter = 0
     for P_index, P in enumerate(P_grid):
+        P_atm = P / BAR_TO_PASCAL
+        cutoff = max(25 * P_atm, 100)
+        if P_atm <= 1:
+            cutoff = 25
+        else:
+            cutoff = min(25*P_atm, 100)
+        
+        lower_indexes = np.searchsorted(lines_array[:,0], wavenums - cutoff, side='right') 
+        upper_indexes = np.searchsorted(lines_array[:,0], wavenums + cutoff)
         for T_index, T in enumerate(T_grid):
             print("Currently processing logP,T", np.log10(P), T)
-            P_atm = P / 1e5
             gamma_p_T = np.zeros(len(a))
             gamma_p_T[has_H2_and_He_gamma_N] = 0.85 * P_atm * (T_ref/ T)**(n_H2[has_H2_and_He_gamma_N]) * gamma_H2[has_H2_and_He_gamma_N] \
                                                + 0.15 * P_atm * (T_ref / T)**(n_He[has_H2_and_He_gamma_N]) * gamma_He[has_H2_and_He_gamma_N]
