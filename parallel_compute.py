@@ -79,7 +79,7 @@ def compute_one_wavenum(wavenumber, T, iso_abundance, iso_mass, Q, v_ij_star, a,
     
 
 
-def handle_master(iso_name, line_source="default", max_cutoff=1000):
+def handle_master(iso_name, line_source="default", max_cutoff=100):
     wavenums = 1e-2 / lambda_grid
     particle_data = get_particle(iso_name)
     particle_id = particle_data[0]
@@ -284,8 +284,8 @@ def handle_slave():
           
 
 if rank == 0:
-    absorption = handle_master("(12C)(16O)")
-    np.save("absorption_parallel.npy", absorption)
+    absorption = handle_master("(1H)2(16O)")
+    np.save("absorption_parallel_H2O.npy", absorption)
 else:
     handle_slave()
 
