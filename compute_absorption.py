@@ -348,7 +348,7 @@ def new_compute_all(v, T, p, iso_name, line_source='default'):
             #print(no_need_compute)
             #lower_indexes = lower_indexes[no_need_compute]
             #print(lower_indexes)
-            absorption_cross_section[i] = compute_one_wavenum(v[i], T, p, iso_abundance, iso_mass, Q, \
+            absorption_cross_section[i] += compute_one_wavenum(v[i], T, p, iso_abundance, iso_mass, Q, \
                                     v_ij_star[lower_indexes[i] : upper_indexes[i]], a[lower_indexes[i] : upper_indexes[i]], \
                                     elower[lower_indexes[i] : upper_indexes[i]], g_upper[lower_indexes[i] : upper_indexes[i]], \
                                     gamma_p_T[lower_indexes[i] : upper_indexes[i]])
@@ -385,8 +385,8 @@ def main():
     #np.save('/home/toma/Desktop/telluric_spectrum_model.npy', earth_spec)
     #absorption_cross_section = new_compute_all(wavenums, 1000, 0.1, '(14N)(16O)', 'default')
     #absorption_cross_section = compute_all(wavenums, 1000, 0.1, '(14N)(16O)2', 'HITEMP_2019')
-    absorption_cross_section = new_compute_all(wavenums, 1000, 0.1, '(12C)(16O)', 'default')
-    np.save('absorption_serial_CO.npy', absorption_cross_section)
+    absorption_cross_section = new_compute_all(wavenums, 1000, 1, '(12C)(16O)2', 'HITEMP_2010')
+    np.save('absorption_serial_CO2.npy', absorption_cross_section)
     #plt.semilogy(wavenums, test)
     plt.semilogy(wavenums, absorption_cross_section)
     #plt.figure()
